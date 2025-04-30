@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections;
+use quinn::Connection;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use rustls::pki_types::CertificateDer;
@@ -22,15 +22,22 @@ async fn main() -> Result<()> {
     )?;
 
     // connect to multiple endpoints using the same socket/endpoint
-    tokio::join!(
-        run_client(&client_endpoint, addr1),
-        run_client(&client_endpoint, addr2),
-        run_client(&client_endpoint, addr3),
-    );
+    let c1 = run_client(&client_endpoint, addr1).await;
+
+    let (mut send, mut recv) = c1.open_bi().await?;
+    send.write_all(b"test").await?;
+    send.finish()?;
+
+    let recv_byte = recv.read_to_end(10).await?;
+    println!("recv:{:?}", recv_byte);
+    let recv_str = String::from_utf8(recv_byte).unwrap();
+    println!("recv utf-8:{:?}", recv_str);
+
+
+    
 
     // Make sure the server has a chance to clean up
     client_endpoint.wait_idle().await;
-
 
     Result::Ok(())
     
@@ -63,16 +70,25 @@ fn run_server(
             "[server] incoming connection: addr={}",
             connection.remote_address()
         );
-    });
+        while let Ok((mut send, mut recv)) = connection.accept_bi().await {
+            // Because it is a bidirectional stream, we can both send and receive.
+            let recv_byte = recv.read_to_end(50).await.unwrap();
+            println!("revc: {:?}", recv_byte);
+            println!("revc from_utf8 : {:?}", String::from_utf8(recv_byte).unwrap());
 
+            send.write_all(b"response").await.unwrap();
+            send.finish().unwrap();
+        }
+    });
     Ok(server_cert)
 }
 
 /// Attempt QUIC connection with the given server address.
-async fn run_client(endpoint: &Endpoint, server_addr: SocketAddr) {
+async fn run_client(endpoint: &Endpoint, server_addr: SocketAddr) -> Connection {
     let connect = endpoint.connect(server_addr, "localhost").unwrap();
     let connection = connect.await.unwrap();
     println!("[client] connected: addr={}", connection.remote_address());
+    connection
 }
 
 pub fn make_server_endpoint(
