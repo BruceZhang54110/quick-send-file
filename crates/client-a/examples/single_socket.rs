@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::collections;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use rustls::pki_types::CertificateDer;
@@ -9,13 +8,17 @@ use quinn::{ClientConfig, Endpoint, ServerConfig};
 #[tokio::main]
 async fn main() -> Result<()> {
 
+    // 创建三个地址，分别启动三个服务器，分别返回三个证书
+    // 3 个独立服务器：分别监听 5000/5001/5002 端口
     let addr1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5000);
     let addr2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5001);
     let addr3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5002);
+    // 每个服务器生成自签名证书
     let server1_cert = run_server(addr1)?;
     let server2_cert = run_server(addr2)?;
     let server3_cert = run_server(addr3)?;
 
+    // 客户端显式信任这三个证书
     let client_endpoint = make_client_endpoint(
         SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),
         &[&server1_cert, &server2_cert, &server3_cert],
@@ -86,7 +89,7 @@ pub fn make_server_endpoint(
 /// Returns default server configuration along with its certificate.
 fn configure_server()
 -> Result<(ServerConfig, CertificateDer<'static>)> {
-    // 生成证书
+    // 使用 rcgen 生成自签名证书
     let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
     let cert_der = CertificateDer::from(cert.cert);
     let priv_key = PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der());

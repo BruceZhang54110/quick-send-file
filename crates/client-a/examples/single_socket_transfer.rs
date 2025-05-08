@@ -9,13 +9,17 @@ use quinn::{ClientConfig, Endpoint, ServerConfig};
 #[tokio::main]
 async fn main() -> Result<()> {
 
+    // 创建三个地址，分别启动三个服务器，分别返回三个证书
+    // 3 个独立服务器：分别监听 5000/5001/5002 端口
     let addr1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5000);
     let addr2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5001);
     let addr3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5002);
+    // 每个服务器生成自签名证书
     let server1_cert = run_server(addr1)?;
     let server2_cert = run_server(addr2)?;
     let server3_cert = run_server(addr3)?;
 
+    // 创建信任所有服务器证书的 QUIC 客户端
     let client_endpoint = make_client_endpoint(
         SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),
         &[&server1_cert, &server2_cert, &server3_cert],
@@ -23,15 +27,26 @@ async fn main() -> Result<()> {
 
     // connect to multiple endpoints using the same socket/endpoint
     let c1 = run_client(&client_endpoint, addr1).await;
+    let c2 = run_client(&client_endpoint, addr2).await;
+
 
     let (mut send, mut recv) = c1.open_bi().await?;
     send.write_all(b"test").await?;
     send.finish()?;
 
+    let (mut send_2, mut recv_2) = c2.open_bi().await?;
+    send_2.write_all(b"test-2").await?;
+    send_2.finish()?;
+
     let recv_byte = recv.read_to_end(10).await?;
     println!("recv:{:?}", recv_byte);
     let recv_str = String::from_utf8(recv_byte).unwrap();
     println!("recv utf-8:{:?}", recv_str);
+
+    let recv_byte_2 = recv_2.read_to_end(10).await?;
+    println!("recv_2:{:?}", recv_byte_2);
+    let recv_str_2 = String::from_utf8(recv_byte_2).unwrap();
+    println!("recv_2 utf-8:{:?}", recv_str_2);
 
 
     
@@ -123,7 +138,7 @@ fn configure_server()
 fn configure_client(
     server_certs: &[&[u8]],
 ) -> Result<ClientConfig> {
-    let mut certs = rustls::RootCertStore::empty();
+    let mut certs: rustls::RootCertStore = rustls::RootCertStore::empty();
     for cert in server_certs {
         certs.add(CertificateDer::from(*cert))?;
     }
