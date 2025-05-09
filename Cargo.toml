@@ -2,6 +2,8 @@
 members = [
     "crates/client-a"
     ,"crates/client-b"
-]
+, "crates/file-transfer", "crates/quic-transport"]
 resolver = "2"
 
+[workspace.dependencies]
+quinn = "0.11.7"

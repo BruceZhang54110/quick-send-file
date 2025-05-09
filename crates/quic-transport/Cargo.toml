@@ -1,0 +1,12 @@
+[package]
+name = "quic-transport"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.98"
+clap = "4.5.37"
+quinn = {workspace = true}
+rcgen = "0.13.2"
+rustls = "0.23.26"
+tokio = {version = "1.44.2", features = ["full"] }
