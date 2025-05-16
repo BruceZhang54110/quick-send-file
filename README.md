@@ -1,7 +1,6 @@
 # Quick Send File
 
-Quick Send File 是一个使用 Rust 编程语言开发的端到端文件发送工具，基于 QUIC 协议和 [quinn](https://github.com/quinn-rs/quinn) 框架构建。
-
+Quick Send File 是一个使用 Rust 编程语言开发的端到端文件发送工具，基于稳定的TCP 或 UDP协议构建。
 ## 预期目标
 
 - **高效传输**：利用 QUIC 协议的多路复用和低延迟特性，实现高效的文件传输。
