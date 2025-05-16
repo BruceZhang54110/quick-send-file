@@ -2,7 +2,7 @@
 members = [
     "crates/client-a"
     ,"crates/client-b"
-, "crates/file-transfer", "crates/quic-transport"]
+, "crates/file-p2p", "crates/file-transfer", "crates/quic-transport"]
 resolver = "2"
 
 [workspace.dependencies]
