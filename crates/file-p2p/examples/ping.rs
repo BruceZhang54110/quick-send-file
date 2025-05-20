@@ -10,12 +10,12 @@ use std::time::Duration;
 /// cargo run --package file-p2p --example ping
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _ = tracing_subscriber::fmt()
+    // 日志追踪默认设置
+    let _  = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
     // create new identity
-    
     let mut swarm = libp2p::SwarmBuilder::with_new_identity().with_tokio()
     // Transport
     .with_tcp(tcp::Config::default(), noise::Config::new, yamux::Config::default)?
@@ -26,14 +26,16 @@ async fn main() -> Result<()> {
     
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.
+    // 监听
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
+        // 拨号
         swarm.dial(remote)?;
-        println!("Dialed {addr}")
+        println!("Dialed {addr}");
     }
 
     loop {
