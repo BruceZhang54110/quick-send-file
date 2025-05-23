@@ -5,7 +5,7 @@ use std::path::PathBuf;
 /// parser cli command for send and receive file
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
-struct Cli {
+pub struct Args {
 
     #[clap(subcommand)]
     pub command: Commands,
@@ -13,28 +13,29 @@ struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
-enum Commands {
+pub enum Commands {
     // send file
-    Send(SendCommand),
+    Send(SendArgs),
     // receive file
-    Receive(ReceiveCommand),
+    Receive(ReceiveArgs),
 }
 
 #[derive(Parser, Debug)]
-struct SendCommand {
+pub struct SendArgs {
 
     // 文件路径
-    #[clap(short, long, value_parser)]
+    #[clap(short, long, value_parser, default_value = None)]
+    pub path: PathBuf,
+
+}
+
+#[derive(Parser, Debug)]
+pub struct ReceiveArgs {
+    // 文件路径
+    #[clap(short, long, value_parser, default_value = None)]
     pub path: PathBuf,
 
     // 文件分享码
-    #[clap(short, long, value_parser)]
+    #[clap(short, long, value_parser, default_value = None)]
     pub code: String,
-}
-
-#[derive(Parser, Debug)]
-struct ReceiveCommand {
-    // 文件路径
-    #[clap(short, long, value_parser)]
-    pub path: PathBuf,
 }

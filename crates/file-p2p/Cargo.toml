@@ -10,7 +10,12 @@ tokio = { version = "1.37.0", features = ["full"] }
 anyhow = "1.0.98"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-iroh = "0.35.0"
+iroh = { version = "0.35.0", features = ["discovery-local-network"] }
 iroh-blobs = { version = "0.35.0", features = ["rpc"] }
 clap = { version = "4.5.38", features = ["derive"] }
+rand = "0.8.5"
+walkdir = "2.5.0"
+async-channel = "2.3.1"
+indicatif = "0.17.11"
+console = "0.15.11"
 
