@@ -3,7 +3,7 @@ use clap::Subcommand;
 use std::path::PathBuf;
 
 /// parser cli command for send and receive file
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct Args {
 
@@ -12,7 +12,8 @@ pub struct Args {
     
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
+#[non_exhaustive]
 pub enum Commands {
     // send file
     Send(SendArgs),
@@ -20,7 +21,7 @@ pub enum Commands {
     Receive(ReceiveArgs),
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct SendArgs {
 
     // 文件路径
@@ -29,7 +30,7 @@ pub struct SendArgs {
 
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct ReceiveArgs {
     // 文件路径
     #[clap(short, long, value_parser, default_value = None)]

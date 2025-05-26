@@ -1,20 +1,37 @@
-use anyhow::{Ok, Result};
-use clap::{Command, Parser};
-use file_p2p::cli::Args;
-use std::result::Result::Ok as Okk;
+use anyhow::Result;
+use clap::{Parser};
+use file_p2p::{cli::{Args, Commands}, transfer::send_file};
+use tracing_subscriber::{fmt, EnvFilter};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    // 初始化日志，设置日志级别为 info
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env()
+            .add_directive(tracing::Level::INFO.into()))
+        .init();
+
     // 1. parse cli agrs
     let args = match Args::try_parse() {
-        Okk(args) => args,
+        Ok(args) => args,
         Err(cause) => {
             panic!("command is error: {}", cause);
         }
     };
 
-    
+    let res = match args.command {
+        Commands::Send(args) => send_file(args).await,
+        _ => anyhow::Ok(())
+    };
 
-    Ok(())
+    if let Err(e) = & res {
+        eprintln!("{e}");
+    }
+
+    match res {
+        Ok(()) => std::process::exit(0),
+        Err(_) => std::process::exit(1),
+        
+    }
+
 }

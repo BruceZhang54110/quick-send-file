@@ -18,4 +18,8 @@ walkdir = "2.5.0"
 async-channel = "2.3.1"
 indicatif = "0.17.11"
 console = "0.15.11"
+futures-lite = "2.6.0"
+num_cpus = "1.16.0"
+data-encoding = "2.9.0"
+arboard = "3.5.0"
 
