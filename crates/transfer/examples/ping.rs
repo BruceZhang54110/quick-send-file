@@ -7,7 +7,7 @@ use libp2p::swarm::SwarmEvent;
 use std::time::Duration;
 
 
-/// cargo run --package file-p2p --example ping
+/// cargo run --package transfer --example ping
 #[tokio::main]
 async fn main() -> Result<()> {
     // 日志追踪默认设置

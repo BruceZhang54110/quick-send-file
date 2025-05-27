@@ -1,6 +1,6 @@
 use anyhow::Result;
-use clap::{Parser};
-use file_p2p::{cli::{Args, Commands}, transfer::send_file};
+use clap::Parser;
+use transfer::{cli::{Args, Commands}, transfer::send_file};
 use tracing_subscriber::{EnvFilter};
 
 #[tokio::main]
