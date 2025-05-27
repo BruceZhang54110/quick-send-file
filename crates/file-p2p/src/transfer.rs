@@ -8,10 +8,11 @@ use console::{style, Key, Term};
 use tracing::info;
 use walkdir::WalkDir;
 use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
-use iroh::{protocol::Router, Endpoint, SecretKey};
+use iroh::{node_info::UserData, protocol::Router, Endpoint, RelayMode, SecretKey};
 use iroh_blobs::{format::collection::Collection, net_protocol::Blobs, store::{ImportMode, ImportProgress}, ticket::BlobTicket, util::fs::canonicalized_path_to_string, BlobFormat, TempTag};
 use data_encoding::HEXLOWER;
 use rand::Rng;
+
 
 /// create a endpoint
 async fn create_endpoint() -> anyhow::Result<Endpoint> {
@@ -22,23 +23,21 @@ async fn create_endpoint() -> anyhow::Result<Endpoint> {
     let endpoint = Endpoint::builder()
         // pplication-Layer_Protocol_Negotiation
         .alpns(vec![iroh_blobs::protocol::ALPN.to_vec()])
-        .discovery_n0()
+        .relay_mode(RelayMode::Disabled)
+        //.discovery_n0()
         // use mDNS Discovery
-        // .discovery_local_network()
+        .discovery_local_network()
         .secret_key(secret_key)
         .bind().await?;
 
     // 获取并打印节点信息
+    let user_data = UserData::try_from(String::from("local-nodes-example"))?;
+    endpoint.set_user_data_for_discovery(Some(user_data));
     let node_id = endpoint.node_id();
     let node_addr = endpoint.node_addr().await?;
-    info!("节点创建成功 - ID: {}, 地址: {:?}", node_id, node_addr);
-
-    // 等待中继服务器初始化
-    info!("正在连接中继服务器...");
-    endpoint.home_relay().initialized().await?;
-    info!("中继服务器连接成功");
-
+    info!("create node success, node_id: {}, node_addr: {:?}", node_id, node_addr);
     anyhow::Ok(endpoint)
+
 }
 
 /// 将文件导入数据库

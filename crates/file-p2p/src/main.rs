@@ -1,14 +1,15 @@
 use anyhow::Result;
 use clap::{Parser};
 use file_p2p::{cli::{Args, Commands}, transfer::send_file};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // 初始化日志，设置日志级别为 info
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env()
-            .add_directive(tracing::Level::INFO.into()))
+            .add_directive(tracing::Level::DEBUG.into()))
+            .with_line_number(true)
         .init();
 
     // 1. parse cli agrs
