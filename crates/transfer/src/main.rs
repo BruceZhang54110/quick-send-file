@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use transfer::{cli::{Args, Commands}, transfer::send_file};
+use transfer::{cli::{Args, Commands}, transfer::{receive_file, send_file}};
 use tracing_subscriber::{EnvFilter};
 
 #[tokio::main]
@@ -8,7 +8,7 @@ async fn main() -> Result<()> {
     // 初始化日志，设置日志级别为 info
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env()
-            .add_directive(tracing::Level::DEBUG.into()))
+            .add_directive(tracing::Level::INFO.into()))
             .with_line_number(true)
         .init();
 
@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
 
     let res = match args.command {
         Commands::Send(args) => send_file(args).await,
-        _ => anyhow::Ok(())
+        Commands::Receive(args) => receive_file(args).await,
     };
 
     if let Err(e) = & res {

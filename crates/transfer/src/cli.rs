@@ -1,5 +1,6 @@
 use clap::Parser;
 use clap::Subcommand;
+use iroh_blobs::ticket::BlobTicket;
 use std::path::PathBuf;
 
 /// parser cli command for send and receive file
@@ -13,7 +14,6 @@ pub struct Args {
 }
 
 #[derive(Subcommand, Debug, Clone)]
-#[non_exhaustive]
 pub enum Commands {
     // send file
     Send(SendArgs),
@@ -32,11 +32,7 @@ pub struct SendArgs {
 
 #[derive(Parser, Debug, Clone)]
 pub struct ReceiveArgs {
-    // 文件路径
-    #[clap(short, long, value_parser, default_value = None)]
-    pub path: PathBuf,
-
     // 文件分享码
     #[clap(short, long, value_parser, default_value = None)]
-    pub code: String,
+    pub code: BlobTicket,
 }

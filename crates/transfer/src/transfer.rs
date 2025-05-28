@@ -1,15 +1,15 @@
-use std::{collections::BTreeMap, path::PathBuf, time::Duration};
+use std::{collections::BTreeMap, path::{Path, PathBuf}, time::Duration};
 
-use crate::cli::SendArgs;
+use crate::cli::{ReceiveArgs, SendArgs};
 use anyhow::{Context, Result};
 use arboard::Clipboard;
 use futures::StreamExt;
 use console::{style, Key, Term};
 use tracing::info;
 use walkdir::WalkDir;
-use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use indicatif::{HumanBytes, HumanDuration, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use iroh::{node_info::UserData, protocol::Router, Endpoint, RelayMode, SecretKey};
-use iroh_blobs::{format::collection::Collection, net_protocol::Blobs, store::{ImportMode, ImportProgress}, ticket::BlobTicket, util::fs::canonicalized_path_to_string, BlobFormat, TempTag};
+use iroh_blobs::{format::collection::Collection, get::{db::DownloadProgress, fsm::{AtBlobHeaderNextError, DecodeError}, request::get_hash_seq_and_sizes}, net_protocol::Blobs, store::{ExportMode, ImportMode, ImportProgress}, ticket::BlobTicket, util::fs::canonicalized_path_to_string, BlobFormat, HashAndFormat, TempTag};
 use data_encoding::HEXLOWER;
 use rand::Rng;
 
@@ -183,6 +183,64 @@ async fn show_ingest_progress(recv: async_channel::Receiver<ImportProgress>) -> 
     Ok(())
 }
 
+/// 展示下载进度
+pub async fn show_download_progress(
+    recv: async_channel::Receiver<DownloadProgress>,
+    total_size: u64,
+) -> anyhow::Result<()> {
+    let mp = MultiProgress::new();
+    mp.set_draw_target(ProgressDrawTarget::stderr());
+    let op = mp.add(make_download_progress());
+    op.set_message(format!("{} Connecting ...\n", style("[1/3]").bold().dim()));
+    let mut total_done = 0;
+    let mut sizes = BTreeMap::new();
+    loop {
+        let x = recv.recv().await;
+        info!("DownloadProgress:{:?}", x);
+        match x {
+            Ok(DownloadProgress::Connected) => {
+                op.set_message(format!("{} Requesting ...\n", style("[2/3]").bold().dim()));
+            }
+            Ok(DownloadProgress::FoundHashSeq { children, .. }) => {
+                op.set_message(format!(
+                    "{} Downloading {} blob(s)\n",
+                    style("[3/3]").bold().dim(),
+                    children + 1,
+                ));
+                op.set_length(total_size);
+                op.reset();
+            }
+            Ok(DownloadProgress::Found { id, size, .. }) => {
+                sizes.insert(id, size);
+            }
+            Ok(DownloadProgress::Progress { offset, .. }) => {
+                op.set_position(total_done + offset);
+            }
+            Ok(DownloadProgress::Done { id }) => {
+                total_done += sizes.remove(&id).unwrap_or_default();
+            }
+            Ok(DownloadProgress::AllDone(stats)) => {
+                op.finish_and_clear();
+                eprintln!(
+                    "Transferred {} in {}, {}/s",
+                    HumanBytes(stats.bytes_read),
+                    HumanDuration(stats.elapsed),
+                    HumanBytes((stats.bytes_read as f64 / stats.elapsed.as_secs_f64()) as u64)
+                );
+                break;
+            }
+            Ok(DownloadProgress::Abort(e)) => {
+                anyhow::bail!("download aborted: {e:?}");
+            }
+            Err(e) => {
+                anyhow::bail!("error reading progress: {e:?}");
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 
 
 fn add_to_clipboard(ticket: &BlobTicket) {
@@ -197,6 +255,99 @@ fn add_to_clipboard(ticket: &BlobTicket) {
         }
         Err(e) => eprintln!("Could not access clipboard: {}", e),
     }
+}
+
+
+fn show_get_error(e: anyhow::Error) -> anyhow::Error {
+    if let Some(err) = e.downcast_ref::<DecodeError>() {
+        match err {
+            DecodeError::NotFound => {
+                eprintln!("{}", style("send side no longer has a file").yellow())
+            }
+            DecodeError::LeafNotFound(_) | DecodeError::ParentNotFound(_) => eprintln!(
+                "{}",
+                style("send side no longer has part of a file").yellow()
+            ),
+            DecodeError::Io(err) => eprintln!(
+                "{}",
+                style(format!("generic network error: {}", err)).yellow()
+            ),
+            DecodeError::Read(err) => eprintln!(
+                "{}",
+                style(format!("error reading data from quinn: {}", err)).yellow()
+            ),
+            DecodeError::LeafHashMismatch(_) | DecodeError::ParentHashMismatch(_) => {
+                eprintln!("{}", style("send side sent wrong data").red())
+            }
+        };
+    } else if let Some(header_error) = e.downcast_ref::<AtBlobHeaderNextError>() {
+        // TODO(iroh-bytes): get_to_db should have a concrete error type so you don't have to guess
+        match header_error {
+            AtBlobHeaderNextError::Io(err) => eprintln!(
+                "{}",
+                style(format!("generic network error: {}", err)).yellow()
+            ),
+            AtBlobHeaderNextError::Read(err) => eprintln!(
+                "{}",
+                style(format!("error reading data from quinn: {}", err)).yellow()
+            ),
+            AtBlobHeaderNextError::NotFound => {
+                eprintln!("{}", style("send side no longer has a file").yellow())
+            }
+        };
+    } else {
+        eprintln!(
+            "{}",
+            style(format!("generic error: {:?}", e.root_cause())).red()
+        );
+    }
+    e
+}
+
+/// 验证路径是否有效 
+/// 路径不能包含 '/'
+fn validate_path_component(component: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !component.contains('/'),
+        "path components must not contain the only correct path separator, /"
+    );
+    anyhow::Ok(())
+}
+
+/// get 导出路径
+fn get_export_path(root: &Path, name: &str) -> anyhow::Result<PathBuf> {
+    let parts = name.split('/');
+    let mut path = root.to_path_buf();
+    for part in parts {
+        validate_path_component(part)?;
+        path.push(part);
+    }
+    Ok(path)
+}
+
+/// 导出文件
+async fn export(db: impl iroh_blobs::store::Store, collection: Collection) -> anyhow::Result<()> {
+    // get current dir
+    let root = std::env::current_dir()?;
+    for (name, hash) in collection.iter() {
+        let target = get_export_path(&root, name)?;
+        if target.exists() {
+            eprintln!(
+                "target {} already exists. Export stopped.",
+                target.display()
+            );
+            eprintln!("You can remove the file or directory and try again. The download will not be repeated.");
+            anyhow::bail!("target {} already exists", target.display());
+        }
+        db.export(
+            *hash, 
+            target, 
+            ExportMode::TryReference, 
+            Box::new(move |_position| Ok(()))
+        ,).await?;
+
+    }
+    Ok(())
 }
 
 /// 文件传输
@@ -232,7 +383,7 @@ pub async fn send_file(args: SendArgs) -> anyhow::Result<()> {
     let (temp_tag, size, collection) = import(path.clone(), blobs.store().clone()).await?;
     let hash = *temp_tag.hash();
 
-    let _ = router.endpoint().home_relay().initialized().await?;
+    // let _ = router.endpoint().home_relay().initialized().await?;
 
     // 生成ticket
     let addr = router.endpoint().node_addr().await?;
@@ -253,7 +404,7 @@ pub async fn send_file(args: SendArgs) -> anyhow::Result<()> {
     }
 
     println!("to get this data, use");
-    println!("sendme receive {}", ticket);
+    println!("transfer receive {}", ticket);
 
 
     let _keyboard = tokio::task::spawn(async move {
@@ -270,11 +421,83 @@ pub async fn send_file(args: SendArgs) -> anyhow::Result<()> {
 
     drop(temp_tag);
 
-    println!("shutting down");
     tokio::time::timeout(Duration::from_secs(2), router.shutdown()).await??;
     tokio::fs::remove_dir_all(blobs_data_dir).await?;
+    println!("shutting down");
+
 
     anyhow::Ok(())
 
+}
+
+
+/// 接收文件方法
+pub async fn receive_file(args: ReceiveArgs) -> anyhow::Result<()> {
+    // Use short code instead of tickets
+    let ticket = args.code;
+    let addr = ticket.node_addr().clone();
+    let endpoint: Endpoint = create_endpoint().await?;
+
+
+    let dir_name: String = format!(".re-sendme-get-{}", ticket.hash().to_hex());
+    let iroh_data_dir = std::env::current_dir()?.join(dir_name);
+    let db = iroh_blobs::store::fs::Store::load(&iroh_data_dir).await?;
+    let mp: MultiProgress = MultiProgress::new();
+    let connect_progress: ProgressBar = mp.add(ProgressBar::hidden());
+    connect_progress.set_draw_target(ProgressDrawTarget::stderr());
+    connect_progress.set_style(ProgressStyle::default_spinner());
+    connect_progress.set_message(format!("connecting to {}", addr.node_id));
+    let connection = endpoint.connect(addr, iroh_blobs::protocol::ALPN).await?;
+    let hash_and_format = HashAndFormat {
+        hash: ticket.hash(),
+        format: ticket.format(),
+    };
+    connect_progress.finish_and_clear();
+    let (send, recv) = async_channel::bounded(32);
+    let progress = iroh_blobs::util::progress::AsyncChannelProgressSender::new(send);
+    let (_hash_seq, sizes) =
+        get_hash_seq_and_sizes(&connection, &hash_and_format.hash, 1024 * 1024 * 32)
+            .await
+            .map_err(show_get_error)?;
+    let total_size = sizes.iter().sum::<u64>();
+    let total_files = sizes.len().saturating_sub(1);
+    let payload_size = sizes.iter().skip(1).sum::<u64>();
+    eprintln!(
+        "getting collection {} {} files, {}",
+        &ticket.hash().to_string(),
+        total_files,
+        HumanBytes(payload_size)
+    );
+    eprintln!(
+        "getting {} blobs in total, {}",
+        sizes.len(),
+        HumanBytes(total_size)
+    );
+    let _task = tokio::spawn(show_download_progress(recv, total_size));
+    let get_conn = || async move { Ok(connection) };
+    let stats = iroh_blobs::get::db::get_to_db(&db, get_conn, &hash_and_format, progress)
+        .await
+        .map_err(|e| show_get_error(anyhow::anyhow!(e)))?;
+    let collection = Collection::load_db(&db, &hash_and_format.hash).await?;
+    for (name, hash) in collection.iter() {
+        println!("    {} {name}", hash.to_string());
+    }
+    if let Some((name, _)) = collection.iter().next() {
+        if let Some(first) = name.split('/').next() {
+            println!("downloading to: {};", first);
+        }
+    }
+    export(db, collection).await?;
+    tokio::fs::remove_dir_all(iroh_data_dir).await?;
+
+    println!(
+            "downloaded {} files, {}. took {} ({}/s)",
+            total_files,
+            HumanBytes(payload_size),
+            HumanDuration(stats.elapsed),
+            HumanBytes((stats.bytes_read as f64 / stats.elapsed.as_secs_f64()) as u64),
+        );
+    
+    Ok(())
 }
 

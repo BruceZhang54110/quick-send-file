@@ -10,7 +10,10 @@ quick-send-file 是一个使用 Rust 编程语言开发的端到端文件发送�
 
 ## 使用方法
 
-待更新
+接收文件：
+```
+cargo run -- receive --code blobad6abgn2sx2ybpegbohyqmiaddymj7sxdxym36uzd22u2syy45udaaacaabaaajfswgqgafmcv2bffmnama6s67h3u7aislmbxfrbr6ohtqssr6z7d2i55d6mtsjr24jwfjrtty
+```
 
 ---
 
