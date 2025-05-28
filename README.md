@@ -8,15 +8,27 @@ quick-send-file 是一个使用 Rust 编程语言开发的端到端文件发送�
 - **跨平台支持**：支持在多种操作系统上运行，包括 Windows、Linux 和 macOS。
 - **简单易用**：提供直观的命令行界面，快速发送和接收文件。
 
-## 使用方法
-
-接收文件：
-```
-cargo run -- receive --code blobad6abgn2sx2ybpegbohyqmiaddymj7sxdxym36uzd22u2syy45udaaacaabaaajfswgqgafmcv2bffmnama6s67h3u7aislmbxfrbr6ohtqssr6z7d2i55d6mtsjr24jwfjrtty
-```
-
----
 
 ## 项目思路
 
 调研要使用的网络传输工具从最初 quinn crate 到 lib-p2p crate 再到现在的 iroh crate
+
+
+## 参考
+学习 [iroh](https://crates.io/crates/iroh) 以及实际文件传输项目 [sendme](https://github.com/n0-computer/sendme) 搭建自己的文件传输项目。
+
+后续会进行改写，实现更多功能
+
+## 使用方法
+
+发送文件：
+```
+cargo run -- send -p [file path]
+```
+
+接收文件：
+```
+cargo run -- receive --code [ticket]
+```
+
+---
